@@ -17,7 +17,6 @@ from bokeh.layouts import widgetbox, layout
 from bokeh.models.widgets import Button, RadioButtonGroup, Select, Slider, Dropdown, TextInput
 
 
-# In[5]:
 d = dict(one='1', two='2')
 lampList = {
     'lamp1': dict(file="lamp1.dat", name="He"), 
@@ -74,6 +73,7 @@ gratings = pd.Series(gratings)
 
 gratings_source = ColumnDataSource(data={'gratings':gratings})
 
+# use the line list on disk to populate the Pandas data frame
 
 for key in lampList.keys():
     file = os.path.join(directory,lampList[key]["file"])
@@ -81,17 +81,12 @@ for key in lampList.keys():
     df.columns=['lambda','intensity']
     lampList[key]["lines"] = df
 
-    
-
-
-# In[17]:
-
-
-
-
-# In[6]:
+# define an output web page
 
 output_file('arcplot.html')
+
+# define a custom action to be performed when hovering near a line
+
 hover = HoverTool(tooltips=[
     ("lambda", "$x{00000.0}"),
 ])
@@ -100,7 +95,7 @@ p = figure(plot_width=600, plot_height=400)
 p.add_tools(hover)
 
 
-# In[7]:
+# create the two data sources that will be displayed
 
 source1 = ColumnDataSource(data={
     "x":lampList['lamp1']['lines']['lambda'],
@@ -113,12 +108,12 @@ source2 = ColumnDataSource(data={
     id=lampList['lamp2']['name']
     )
 
-
-# In[8]:
+# create the two objects
 
 line1 = p.line("x","y", source=source1, color='firebrick', legend=lampList['lamp1']['name'])
 line2 = p.line("x","y", source=source2, color='navy', legend=lampList['lamp2']['name'])
 
+# initial conditions
 
 initial_grating_selection='600/10000'
 initial_lambda_selection = 7500
@@ -129,36 +124,30 @@ initial_xmax = initial_lambda_selection+initial_range/2
 p.x_range=Range1d(initial_xmin, initial_xmax)
 
 
-# In[9]:
+# a bit of plotting setup
 
 p.title.text = "LRIS Arcplot"
 p.title.align = "right"
 p.title.text_color = "orange"
 p.title.text_font_size = "25px"
-
-
-# In[10]:
-
 p.background_fill_color = "beige"
 p.background_fill_alpha = 0.5
-
-
-# In[11]:
-
 p.xaxis.axis_label = "Wavelength"
 p.yaxis.axis_label = "Intensity"
 
-
-# In[12]:
+# miracles do happen. This line turns the legend into an active control that turns on and off the plot
 
 p.legend.click_policy="hide"
 
+# add widgets
 
 rangeBox = TextInput(title="Wavelength range", value=str(initial_range))
 xminBox = TextInput(title="Minimum wavelength", value=str(initial_xmin))
 xmaxBox = TextInput(title="Maximum Wavelength", value=str(initial_xmax))
 
 select = Select(title="Gratings:",  value=initial_grating_selection, options=[str(x) for x in gratings.keys()])
+
+# each widgets can be associated with an action, which can be defined either in python or in JS
 
 update_xrange_slider = CustomJS(args=dict(x_range=p.x_range,  gratings=gratings_source, select=select, 
                                           rangeBox=rangeBox, xminBox= xminBox, xmaxBox= xmaxBox), code="""
@@ -204,29 +193,9 @@ xminBox.set("value", xmin.toString());
 xmaxBox.set("value", xmax.toString());
 """)
 
-
-
-
-
 select.js_on_change("change", update_xrange_select)
 
-# In[15]:
-#def update_range(attr,old,new):
-#    grating = str(select.value)
-#    sys.stdout.write(grating)
-#    range = float(gratings[grating]['range'])
-#    xmin = float(slider.value-range/2)
-#    xmax = float(slider.value+range/2)
-#    rangeBox.value = str(range)
-#    xminBox.value = str(xmin)
-#    xmaxBox.value = str(xmax)
-#    p.title.text=select.value
-
-
-#select.on_change('value',update_range)
-
-
-# In[18]:
+# how do we want to see this on the page?
 
 l = layout([
     [select],
@@ -237,17 +206,9 @@ l = layout([
 ])
 show(l)
 
-# In[20]:
+
 
 curdoc().add_root(l)
-
-
-# In[ ]:
-
-#show(widgetbox(p,button_1, slider, button_group, select, button_2, width=300))
-
-
-# In[19]:
 
 
 
