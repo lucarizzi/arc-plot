@@ -17,7 +17,6 @@ from bokeh.layouts import widgetbox, layout
 from bokeh.models.widgets import Button, RadioButtonGroup, Select, Slider, Dropdown, TextInput
 
 
-d = dict(one='1', two='2')
 lampList = {
     'lamp1': dict(file="lamp1.dat", name="He"), 
     'lamp2': dict(file="lamp2.dat", name="Ar")}
