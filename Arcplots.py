@@ -151,13 +151,14 @@ select = Select(title="Gratings:",
 # each widgets can be associated with an action, which can be defined either in python or in JS
 
 update_xrange_slider = CustomJS(args=dict(x_range=p.x_range,
-                                          gratings=gratings_source,
+                                          gratings=gratings_source.data,
                                           select=select,
-                                          rangeBox=rangeBox, xminBox=xminBox, xmaxBox=xmaxBox), code="""
+                                          rangeBox=rangeBox, xminBox=xminBox, xmaxBox=xmaxBox),
+                                          code="""
 
-var central = cb_obj.get("value");
+var central = cb_obj.value;
 var selected_grating = select.value;
-var gratings_data = gratings.get('data')
+var gratings_data = gratings;
 var gratings = gratings_data['gratings']
 var lookup = {};
 for (var i=0, len=gratings.length; i < len; i++) {
@@ -166,29 +167,36 @@ for (var i=0, len=gratings.length; i < len; i++) {
 var range = lookup[selected_grating.toString()].range;
 var xmin = central-range/2;
 var xmax = central+range/2;
-
-x_range.set("start", xmin);
-x_range.set("end", xmax);
-rangeBox.set("value", range.toString());
-xminBox.set("value", xmin.toString());
-xmaxBox.set("value", xmax.toString());
-""")
+x_range.start=xmin;
+x_range.change.emit;
+x_range.end=xmax;
+x_range.change.emit;
+var new_range = xmax-xmin
+rangeBox.value=new_range.toString();
+rangeBox.change.emit;
+xminBox.value=xmin.toString();
+xminBox.change.emit;
+xmaxBox.value=xmax.toString();
+xmaxBox.change.emit;
+"""
+)
 
 slider = Slider(start=3700, end=10000, value=7500, step=1,
                 title="Central wavelength",
                 callback=update_xrange_slider)
 
 update_xrange_select = CustomJS(args=dict(x_range=p.x_range,
-                                          gratings=gratings_source,
+                                          gratings=gratings_source.data,
                                           slider=slider,
                                           rangeBox=rangeBox,
                                           xminBox=xminBox,
-                                          xmaxBox=xmaxBox), code="""
+                                          xmaxBox=xmaxBox),
+                                          code="""
 
 var central=slider.value;
-var selected_grating=cb_obj.get("value");
-var gratings_data=gratings.get('data')
-var gratings=gratings_data['gratings']
+var selected_grating=cb_obj.value;
+var gratings_data=gratings;
+var gratings=gratings_data['gratings'];
 var lookup={};
 for (var i=0, len=gratings.length; i < len; i++) {
     lookup[gratings[i].id] = gratings[i];
@@ -196,13 +204,22 @@ for (var i=0, len=gratings.length; i < len; i++) {
 var range=lookup[selected_grating.toString()].range;
 var xmin=central-range/2;
 var xmax=central+range/2;
-
-x_range.set("start", xmin);
-x_range.set("end", xmax);
-rangeBox.set("value", range.toString());
-xminBox.set("value", xmin.toString());
-xmaxBox.set("value", xmax.toString());
+x_range.start=xmin;
+x_range.change.emit;
+x_range.end=xmax;
+x_range.change.emit;
+rangeBox.value=(xmax-xmin).toString();
+rangeBox.change.emit;
+xminBox.value=xmin.toString();
+xminBox.change.emit;
+xmaxBox.value=xmax.toString();
+xmaxBox.change.emit;
 """)
+
+#rangeBox.set("value", range.toString());
+#xminBox.set("value", xmin.toString());
+#xmaxBox.set("value", xmax.toString());
+#""")
 
 select.js_on_change("change", update_xrange_select)
 
@@ -215,6 +232,6 @@ l = layout([
     [rangeBox],
     [xminBox, xmaxBox]
 ])
-show(l)
-
-curdoc().add_root(l)
+#show(l)
+doc = curdoc()
+doc.add_root(l)
