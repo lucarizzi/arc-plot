@@ -1,29 +1,32 @@
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
+import os
 
-# coding: utf-8
-
-# In[4]:
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objs as go
+
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
-import os
-import sys
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-from bokeh.plotting import figure, output_file, show, curdoc
-from bokeh.models import Range1d, HoverTool, ColumnDataSource, CustomJS
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-from bokeh.layouts import widgetbox, layout
-from bokeh.models.widgets import Select, Slider, TextInput
-
-
-lampList = {
-    'lamp1': dict(file="lamp1.dat", name="He"),
-    'lamp2': dict(file="lamp2.dat", name="Ar")}
+# SETUP THE DATA STRUCTURES and READ LINE LISTS
 
 directory = "arcplots"
 
 sides = ["red", "blue"]
+
+dichroics = {
+    '460': {'file': 'dichroic_460_t.dat'},
+    '500': {'file': 'dichroic_500_t.dat'},
+    '560': {'file': 'dichroic_560_t.dat'},
+    '680': {'file': 'dichroic_680_t.dat'}
+}
+
 
 gratings = dict()
 
@@ -64,174 +67,116 @@ gratings["831/8200"] = {
 
 # convert into a pandas data source
 
-gratings = pd.Series(gratings)
-
-# and make it an object that can be shared with the JavaScript layer
-
-gratings_source = ColumnDataSource(data={'gratings': gratings})
-
 # use the line list on disk to populate the Pandas data frame
 
-for key in lampList.keys():
-    file = os.path.join(directory, lampList[key]["file"])
-    df = pd.read_csv(file, delim_whitespace=True)
-    df.columns = ['lambda', 'intensity']
-    lampList[key]["lines"] = df
+line_list_file = os.path.join(directory,'lamps.dat')
+line_list = pd.read_csv(line_list_file, delim_whitespace=True)
+line_list.columns = ['Wavelength', 'Hg', 'Ne', 'Ar', 'Zn', 'Cd']
 
-# define an output web page
+for key in dichroics.keys():
+    df = pd.read_csv(os.path.join(directory, dichroics[key]['file']), delim_whitespace=True)
+    df.columns = ['wavelength', 'transmission']
+    transmission = np.interp(line_list.Wavelength, df.wavelength, df.transmission)
+    dichroics[key]['transmission'] = transmission
 
-output_file('arcplot.html')
+print(dichroics)
 
-# define a custom action to be performed when hovering near a line
+dropdown_options_for_gratings = []
+for grating in gratings.keys():
+    option = {}
+    option['label'] = grating
+    option['value'] = grating
+    dropdown_options_for_gratings.append(option)
 
-hover = HoverTool(tooltips=[
-    ("lambda", "$x{00000.0}"),
+dropdown_options_for_dichroics = []
+for dichroic in dichroics.keys():
+    option = {}
+    option['label'] = dichroic
+    option['value'] = dichroic
+    dropdown_options_for_dichroics.append(option)
+
+app.layout = html.Div([
+        html.Div([
+            html.H3('Red side grating'),
+            dcc.Dropdown(
+                id='id-select-grating',
+                options=dropdown_options_for_gratings,
+                value='600/10000'
+                    ),
+            html.H3('Central wavelength'),
+            dcc.Input(
+                id='id-central-wavelength',
+                type='text',
+                value=5500
+                    ),
+            html.H3('Dichroic'),
+            dcc.Dropdown(
+                id='id-select-dichroic',
+                options=dropdown_options_for_dichroics,
+                value='560'
+                    ),
+            ],
+            style={'width': '49%', 'display': 'inline-block'}
+        ),
+        dcc.Graph(
+            id='id-red-side-arcplot',
+            style = {'width': '49%'}
+        ),
+        html.Div(id='id-range')
+
 ])
 
-p = figure(plot_width=600, plot_height=400)
-p.add_tools(hover)
-
-
-# create the two data sources that will be displayed
-
-source1 = ColumnDataSource(data={
-    "x": lampList['lamp1']['lines']['lambda'],
-    "y": gaussian_filter(lampList['lamp1']['lines']['intensity'], sigma=4)},
-    id=lampList['lamp1']['name']
-    )
-source2 = ColumnDataSource(data={
-    "x": lampList['lamp2']['lines']['lambda'],
-    "y": gaussian_filter(lampList['lamp2']['lines']['intensity'], sigma=4)},
-    id=lampList['lamp2']['name']
-    )
-
-# create the two objects
-
-line1 = p.line("x", "y", source=source1, color='firebrick',
-               legend=lampList['lamp1']['name'])
-line2 = p.line("x", "y", source=source2, color='navy',
-               legend=lampList['lamp2']['name'])
-
-# initial conditions
-
-initial_grating_selection = '600/10000'
-initial_lambda_selection = 7500
-initial_range = gratings[initial_grating_selection]['range']
-initial_xmin = initial_lambda_selection-initial_range/2
-initial_xmax = initial_lambda_selection+initial_range/2
-
-p.x_range = Range1d(initial_xmin, initial_xmax)
-
-
-# a bit of plotting setup
-
-p.title.text = "LRIS Arcplot"
-p.title.align = "right"
-p.title.text_color = "orange"
-p.title.text_font_size = "25px"
-p.background_fill_color = "beige"
-p.background_fill_alpha = 0.5
-p.xaxis.axis_label = "Wavelength"
-p.yaxis.axis_label = "Intensity"
-
-# miracles do happen. This line turns the legend into an active control that turns on and off the plot
-
-p.legend.click_policy = "hide"
-
-# add widgets
-
-rangeBox = TextInput(title="Wavelength range", value=str(initial_range))
-xminBox = TextInput(title="Minimum wavelength", value=str(initial_xmin))
-xmaxBox = TextInput(title="Maximum Wavelength", value=str(initial_xmax))
-
-select = Select(title="Gratings:",
-                value=initial_grating_selection,
-                options=[str(x) for x in gratings.keys()])
-
-# each widgets can be associated with an action, which can be defined either in python or in JS
-
-update_xrange_slider = CustomJS(args=dict(x_range=p.x_range,
-                                          gratings=gratings_source.data,
-                                          select=select,
-                                          rangeBox=rangeBox, xminBox=xminBox, xmaxBox=xmaxBox),
-                                          code="""
-
-var central = cb_obj.value;
-var selected_grating = select.value;
-var gratings_data = gratings;
-var gratings = gratings_data['gratings']
-var lookup = {};
-for (var i=0, len=gratings.length; i < len; i++) {
-    lookup[gratings[i].id] = gratings[i];
-    }
-var range = lookup[selected_grating.toString()].range;
-var xmin = central-range/2;
-var xmax = central+range/2;
-x_range.start=xmin;
-x_range.change.emit;
-x_range.end=xmax;
-x_range.change.emit;
-var new_range = xmax-xmin
-rangeBox.value=new_range.toString();
-rangeBox.change.emit;
-xminBox.value=xmin.toString();
-xminBox.change.emit;
-xmaxBox.value=xmax.toString();
-xmaxBox.change.emit;
-"""
+@app.callback(
+    Output(component_id='id-range', component_property='children'),
+    [Input(component_id='id-select-grating', component_property='value')]
 )
+def update_range_div(value):
+    range = gratings[value]['range']
+    return 'Wavelength range for this grating: {}'.format(range)
 
-slider = Slider(start=3700, end=10000, value=7500, step=1,
-                title="Central wavelength",
-                callback=update_xrange_slider)
 
-update_xrange_select = CustomJS(args=dict(x_range=p.x_range,
-                                          gratings=gratings_source.data,
-                                          slider=slider,
-                                          rangeBox=rangeBox,
-                                          xminBox=xminBox,
-                                          xmaxBox=xmaxBox),
-                                          code="""
+@app.callback(
+    Output(component_id='id-red-side-arcplot', component_property='figure'),
+    [Input(component_id='id-central-wavelength', component_property='value'),
+     Input(component_id='id-select-grating', component_property='value'),
+     Input(component_id='id-select-dichroic', component_property='value')],
+)
+def update_figure_xrange(central_wavelength, grating, dichroic):
+    range=gratings[grating]['range']
+    try:
+        xmin = float(central_wavelength)-(range/2)
+        xmax = float(central_wavelength)+(range/2)
+    except ValueError:
+        xmin=3700
+        xmax=9000
+    if xmin<3000:
+        xmin = 3000
+    if xmax>11000:
+        xmax = 11000
+    line_plot_data = []
+    lamps = list(line_list)
+    for lamp in lamps[1:]:
+        line_plot_data.append(
+            {
+                'x': line_list['Wavelength'],
+                'y': gaussian_filter(line_list[lamp]*dichroics[dichroic]['transmission'], sigma=4),
+                'name': str(lamp),
+                'mode': 'lines'
 
-var central=slider.value;
-var selected_grating=cb_obj.value;
-var gratings_data=gratings;
-var gratings=gratings_data['gratings'];
-var lookup={};
-for (var i=0, len=gratings.length; i < len; i++) {
-    lookup[gratings[i].id] = gratings[i];
-    }
-var range=lookup[selected_grating.toString()].range;
-var xmin=central-range/2;
-var xmax=central+range/2;
-x_range.start=xmin;
-x_range.change.emit;
-x_range.end=xmax;
-x_range.change.emit;
-rangeBox.value=(xmax-xmin).toString();
-rangeBox.change.emit;
-xminBox.value=xmin.toString();
-xminBox.change.emit;
-xmaxBox.value=xmax.toString();
-xmaxBox.change.emit;
-""")
+            }
+        )
 
-#rangeBox.set("value", range.toString());
-#xminBox.set("value", xmin.toString());
-#xmaxBox.set("value", xmax.toString());
-#""")
+    arcplot_figure = {
+                'data': line_plot_data,
+                'layout': {
+                    'clickmode': 'event+select',
+                    'xaxis': {'range': [xmin,xmax]}
+                    }
 
-select.js_on_change("change", update_xrange_select)
+        }
+    return arcplot_figure
 
-# how do we want to see this on the page?
 
-l = layout([
-    [select],
-    [slider],
-    [p],
-    [rangeBox],
-    [xminBox, xmaxBox]
-])
-#show(l)
-doc = curdoc()
-doc.add_root(l)
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
